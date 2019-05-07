@@ -1,0 +1,375 @@
+#include "chart.h"
+#include <QDebug>
+
+
+Chart::Chart()
+{
+    for(int i=0; i<LOGMAX; i++)
+        logTable[i]=(i/9)+log10((i%9)+1);
+}
+
+void Chart::drawLogGrid(QPainter &painter, QRect geometry)
+{
+    gx=geometry.x()+MX;
+    gy=geometry.y()+MY;
+    gw=geometry.width()-(2*MX);
+    gh=geometry.height()-(2*MY);
+
+    dx=gw/static_cast<double>(logTable[gridNumX]);
+    dy=gh/static_cast<double>(gridNumY);
+
+    QPen pen;
+    pen.setWidth(1);
+    pen.setColor(backgroundColor);
+    painter.setPen(pen);
+    painter.setBrush(backgroundColor);
+    painter.drawRect(geometry);
+    // -----  frame ------------
+    pen.setStyle(Qt::SolidLine);
+    pen.setColor(gridColor);
+    pen.setWidth(2);
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(pen);
+    painter.drawRect(gx, gy, gw, gh);
+    // ----- grid ------------
+    pen.setStyle(Qt::DotLine);
+    pen.setWidth(1);
+    painter.setPen(pen);
+    for(int px=1; px<gridNumX; px++)
+        painter.drawLine(QLineF(gx+(logTable[px]*dx), gy, gx+(logTable[px]*dx), gy+gh));
+    for(int py=1; py<gridNumY; py++)
+        painter.drawLine(QLineF(gx, gy+(py*dy), gx+gw, gy+(py*dy)));
+    // ------ desc ----------
+    QFont font;
+    font.setPointSize(8);
+    painter.setFont(font);
+    pen.setColor(textColor);
+    painter.setPen(pen);
+    dvy=maxValueY-minValueY;
+    // ------ todo ----------
+    int f=minValueX;
+    for(int px=0; px<gridNumX; px++){
+
+        if((px % 9) == 0){
+
+            painter.drawText(QPointF(gx+logTable[px]*dx-(font.pointSize()), gy+gh+(font.pointSize()*2)), QString().sprintf("%4d",f));
+            f*=10;
+        }
+    }
+    painter.drawText(QPointF(gx+logTable[gridNumX]*dx-(font.pointSize()), gy+gh+(font.pointSize()*2)), QString().sprintf("%4d",maxValueX));
+
+    for(int py=0; py<=gridNumY; py++)
+        painter.drawText(QPointF(gx-(font.pointSize()*4), gy+(font.pointSize()/2)+py*dy), QString().sprintf("%4d", static_cast<int>(maxValueY-(dvy*py)/gridNumY)));
+
+}
+
+void Chart::drawLogData(QPainter &painter, QVector<double> &data)
+{
+    dx=gw/static_cast<double>(log10(dataSize-minValueX));
+    dy=gh/static_cast<double>(maxValueY-minValueY);
+
+    QPen pen;
+    pen.setStyle(Qt::SolidLine);
+    pen.setColor(plotColor);
+    pen.setWidth(2);
+    painter.setPen(pen);
+
+    for(int i=minValueX; i<dataSize; i++)
+        painter.drawLine(QLineF(gx+log10(1+i-1)*dx, gy+(20*log10(1/data[i-1])*dy), gx+log10(1+i)*dx, gy+(20*log10(1/data[i])*dy)));
+}
+
+
+
+void Chart::drawCircle(QPainter &painter, QRect geometry)
+{
+    gx=geometry.x()+MX;
+    gy=geometry.y()+MY;
+    gw=geometry.width()-(2*MX);
+    gh=geometry.height()-(2*MY);
+
+    dx=gw/static_cast<double>(gridNumX);
+    dy=gh/static_cast<double>(gridNumY);
+
+    QPen pen;
+    pen.setWidth(2);
+    pen.setColor(Qt::blue);
+    painter.setPen(pen);
+    painter.setBrush(Qt::black);
+    painter.drawEllipse(static_cast<int>(gx + (gw - gh) *0.5), gy, gh, gh );
+
+    pen.setWidth(1);
+    pen.setColor(Qt::white);
+    pen.setStyle(Qt::DotLine);
+    painter.setPen(pen);
+    double step = 1.0/gridCircle;
+    double plusStep = 1.0/gridCircle;
+    for(int i=0; i<=gridCircle; i++) {
+        painter.drawEllipse(QPoint(gw/2+gx,gh/2+gy),static_cast<int>((gh/2)*(1-step)),static_cast<int>((gh/2)*(1-step)));
+        step+=plusStep;
+        //qDebug() << "Step: " << step;
+    }
+
+    for(int i = 0; i < dataSize; i+=45){
+        float radians = qDegreesToRadians(static_cast<float>(i));
+        painter.drawLine(gw/2+gx,gh/2+gy,(gw/2+gx)+((gh/2)*1*qCos(radians)),gh/2+gy+((gh/2)*1*qSin(radians)));
+    }
+}
+
+void Chart::drawCircleData(QPainter &painter, QVector<double> &data, int position){
+
+    QPen pen;
+    pen.setWidth(2);
+    pen.setColor(Qt::green);
+    painter.setPen(pen);
+    painter.setBrush(backgroundColor);
+    for(int i = 0; i < dataSize; i++){
+        float radians = qDegreesToRadians(static_cast<float>(i));
+        painter.drawPoint((gw/2+gx)+((gh/2)*data[i]*qCos(radians)),gh/2+gy+((gh/2)*data[i]*qSin(radians)));
+        lastX = (gw/2+gx)+((gh/2)*data[i]*qCos(radians));
+        lastY = gh/2+gy+((gh/2)*data[i]*qSin(radians));
+        //painter.drawLine(firstX,firstY,lastX,lastY);
+        firstX = lastX;
+        firstY = lastY;
+        //zwykle generowanie zakomentowanie drawLine
+        //fajniejsze generowanie przeniesienie 2 linijek wyzej za for'a
+    }
+    float positionRadian = qDegreesToRadians(static_cast<float>(position));
+    pen.setColor(Qt::red);
+    painter.setPen(pen);
+    painter.drawLine(gw/2+gx,gh/2+gy,(gw/2+gx)+((gh/2)*1*qCos(positionRadian)),gh/2+gy+((gh/2)*1*qSin(positionRadian)));
+}
+
+
+
+void Chart::drawSemiLogData(QPainter &painter, QVector<double> &data)
+{
+    dx=gw/static_cast<double>(log10(dataSize));
+    dy=gh/(360.0/57.2);
+    gmy=gy+(gh/2);
+
+    QPen pen;
+    pen.setStyle(Qt::SolidLine);
+    pen.setColor(plotColor);
+    pen.setWidth(2);
+    painter.setPen(pen);
+
+    for(int i=1; i<dataSize; i++)
+        painter.drawLine(QLineF(gx+log10(1+i-1)*dx, gmy-(data[i-1]*dy), gx+log10(1+i)*dx, gmy-(data[i]*dy)));
+
+}
+
+void Chart::drawLinearGrid(QPainter &painter, QRect geometry)
+{
+    gx=geometry.x()+MX;
+    gy=geometry.y()+MY;
+    gw=geometry.width()-(2*MX);
+    gh=geometry.height()-(2*MY);
+
+    dx=gw/static_cast<double>(gridNumX);
+    dy=gh/static_cast<double>(gridNumY);
+
+    QPen pen;
+    pen.setWidth(1);
+    pen.setColor(backgroundColor);
+    painter.setPen(pen);
+    painter.setBrush(backgroundColor);
+    painter.drawRect(geometry);
+
+    // -----  frame ------------
+    pen.setStyle(Qt::SolidLine);
+    pen.setColor(gridColor);
+    pen.setWidth(2);
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(pen);
+    painter.drawRect(gx, gy, gw, gh);
+    // ----- grid ------------
+    pen.setStyle(Qt::DotLine);
+    pen.setWidth(1);
+    painter.setPen(pen);
+    for(int px=1; px<gridNumX; px++)
+        painter.drawLine(QLineF(gx+(px*dx), gy, gx+(px*dx), gy+gh));
+    for(int py=1; py<gridNumY; py++)
+        painter.drawLine(QLineF(gx, gy+(py*dy), gx+gw, gy+(py*dy)));
+    // ------ desc ----------
+    QFont font;
+    font.setPointSize(8);
+    painter.setFont(font);
+    pen.setColor(textColor);
+    painter.setPen(pen);
+    dvx=maxValueX-minValueX;
+    dvy=maxValueY-minValueY;
+    for(int px=0; px<=gridNumX; px++)
+        painter.drawText(QPointF(gx-(font.pointSize()/4)+px*dx, gy+gh+(font.pointSize()*2)), QString().sprintf("%4.0f",(minValueX+(dvx*px)/gridNumX)));
+    for(int py=0; py<=gridNumY; py++)
+        painter.drawText(QPointF(gx-(font.pointSize()*4), gy+(font.pointSize()/2)+py*dy), QString().sprintf("%4.1f",(maxValueY-(dvy*py)/gridNumY)));
+
+}
+void Chart::drawLinearData(QPainter &painter, QVector<double> &data)
+{
+    dx=gw/static_cast<double>(dataSize-1);
+    dy=gh/(maxValueY-minValueY);
+    //gmy=gy+(gh/2);
+    gmy=gy+gh;
+
+    QPen pen;
+    pen.setStyle(Qt::SolidLine);
+    pen.setColor(plotColor);
+    pen.setWidth(2);
+    painter.setPen(pen);
+
+    for(int i=1; i<dataSize; i++)
+        painter.drawLine(QLineF(gx+(i-1)*dx, gmy-(data[i-1]*dy), gx+i*dx, gmy-(data[i]*dy)));
+
+    //---------limits------------
+    dmkx=gw/static_cast<double>(maxValueX-minValueX);
+    dmky=gh/static_cast<double>(maxValueY-minValueY);
+
+    QPen pen2;
+    pen2.setWidth(1);
+    pen2.setStyle(Qt::DashLine);
+    pen2.setWidth(1);
+    painter.setPen(pen2);
+    QFont font;
+    font.setPointSize(8);
+    painter.setFont(font);
+    pen2.setColor(Qt::blue);
+    painter.setPen(pen2);
+    painter.drawLine(QLineF(gx+((limitsmin-minValueX)*dmkx), gy, gx+((limitsmin-minValueX)*dmkx), gy+gh));
+    pen2.setColor(Qt::green);
+    painter.setPen(pen2);
+    painter.drawLine(QLineF(gx+((limitsmax-minValueX)*dmkx), gy, gx+((limitsmax-minValueX)*dmkx), gy+gh));
+}
+
+void Chart::getMousePosition(int x, int y)
+{
+    dmkx=gw/static_cast<double>(maxValueX-minValueX);
+    dmky=gh/static_cast<double>(maxValueY-minValueY);
+
+    if(x<gx) x=gx;
+    if(x>gx+gw) x=gx+gw;
+    if(y<gy) y=gy;
+    if(y>gy+gh) y=gy+gh;
+
+    markerX=minValueX+((x-gx)/dmkx);
+    markerY=maxValueY-((y-gy)/dmky);
+}
+
+
+void Chart::getLeftLimits(int x)
+{
+    dmkx=gw/static_cast<double>(maxValueX-minValueX);
+
+    if(minValueX+((x-gx)/dmkx) < limitsmax)
+    {
+        if(x<gx) x=gx;
+        if(x>gx+gw) x=gx+gw;
+        limitsmin=minValueX+((x-gx)/dmkx);
+    }
+
+
+}
+
+void Chart::getRightLimits(int x)
+{
+    dmkx=gw/static_cast<double>(maxValueX-minValueX);
+
+    if(minValueX+((x-gx)/dmkx) > limitsmin)
+    {
+        if(x<gx) x=gx;
+        if(x>gx+gw) x=gx+gw;
+
+        limitsmax=minValueX+((x-gx)/dmkx);
+    }
+}
+
+void Chart::showMarkers(QPainter &painter, QVector<double> &data)
+{
+    dmkx=gw/static_cast<double>(maxValueX-minValueX);
+    dmky=gh/static_cast<double>(maxValueY-minValueY);
+
+    QPen pen;
+    pen.setWidth(1);
+    pen.setStyle(Qt::DashLine);
+    pen.setWidth(1);
+    painter.setPen(pen);
+    QFont font;
+    font.setPointSize(8);
+    painter.setFont(font);
+
+    switch (chartMode) {
+
+    case LinearChart: {
+
+        pen.setColor(markersColorA);
+        painter.setPen(pen);
+        painter.drawLine(QLineF(gx+((markerX-minValueX)*dmkx), gy, gx+((markerX-minValueX)*dmkx), gy+gh));
+        painter.drawLine(QLineF(gx, gy+((maxValueY-markerY)*dmky), gx+gw, gy+((maxValueY-markerY)*dmky)));
+        painter.drawText(QPointF(gx+(markerX-minValueX)*dmkx, gy-font.pointSize()), QString().sprintf("%.1f",markerX));
+        painter.drawText(QPointF(gx+gw+font.pointSize(), gy+(maxValueY-markerY)*dmky), QString().sprintf("%.1f",markerY));
+
+        pen.setColor(markersColorB);
+        painter.setPen(pen);
+        painter.drawLine(QLineF(gx, gmy-(data[static_cast<int>(markerX)-1]*dy), gx+gw, gmy-(data[static_cast<int>(markerX)-1]*dy)));
+        painter.drawText(QPointF(gx+gw+font.pointSize(), gmy-data[static_cast<int>(markerX)-1]*dy), QString().sprintf("%.1f", data[static_cast<int>(markerX)-1]));
+        break;
+    }
+    case SemiLogChart: {
+
+        if(markerX>maxValueX)
+        {
+            markerX=minValueX;
+            markerY=minValueY;
+        }
+        double xlog=(pow(10,(log10(dataSize)*markerX/(dataSize))));
+        pen.setColor(markersColorA);
+        painter.setPen(pen);
+        painter.drawLine(QLineF(gx+((markerX-minValueX)*dmkx), gy, gx+((markerX-minValueX)*dmkx), gy+gh));
+        painter.drawLine(QLineF(gx, gy+((maxValueY-markerY)*dmky), gx+gw, gy+((maxValueY-markerY)*dmky)));
+        painter.drawText(QPointF(gx+(markerX-minValueX)*dmkx, gy-font.pointSize()), QString().sprintf("%.1f", xlog));
+        painter.drawText(QPointF(gx+gw+font.pointSize(), gy+(maxValueY-markerY)*dmky), QString().sprintf("%.1f", markerY));
+
+        pen.setColor(markersColorB);
+        painter.setPen(pen);
+        painter.drawLine(QLineF(gx, gmy-data[static_cast<int>(xlog)-1]*dy, gx+gw, gmy-data[static_cast<int>(xlog)-1]*dy));
+        painter.drawText(QPointF(gx+gw+font.pointSize(), gmy-data[static_cast<int>(xlog)-1]*dy), QString().sprintf("%.1f", data[static_cast<int>(xlog)-1]*180));
+        break;
+    }
+    case LogChart:{
+
+        if(markerX>maxValueX)
+        {
+            markerX=minValueX;
+            markerY=minValueY;
+        }
+        double xlog=(pow(10,(log10(dataSize)*markerX/(dataSize))));
+        pen.setColor(markersColorA);
+        painter.setPen(pen);
+        painter.drawLine(QLineF(gx+((markerX-minValueX)*dmkx), gy, gx+((markerX-minValueX)*dmkx), gy+gh));
+        painter.drawLine(QLineF(gx, gy+((maxValueY-markerY)*dmky), gx+gw, gy+((maxValueY-markerY)*dmky)));
+        painter.drawText(QPointF(gx+(markerX-minValueX)*dmkx, gy-font.pointSize()), QString().sprintf("%.1f", xlog));
+        painter.drawText(QPointF(gx+gw+font.pointSize(), gy+(maxValueY-markerY)*dmky), QString().sprintf("%.1f", markerY));
+
+        pen.setColor(markersColorB);
+        painter.setPen(pen);
+        painter.drawLine(QLineF(gx, gy+20*log10(1/data[static_cast<int>(xlog)-1])*dy, gx+gw, gy+20*log10(1/data[static_cast<int>(xlog)-1])*dy));
+        painter.drawText(QPointF(gx+gw+font.pointSize(), gy+20*log10(1/data[static_cast<int>(xlog)-1])*dy), QString().sprintf("%.1f", -20*log10(1/data[static_cast<int>(xlog)-1])));
+        break;
+    }
+    }
+}
+
+void Chart::showTimeWindow(QPainter &painter, QVector<double> &data)
+{
+    dx=gw/static_cast<double>(dataSize-1);
+    dy=gh/(maxValueY-minValueY);
+    gmy=gy+(gh/2);
+
+    QPen pen;
+    pen.setStyle(Qt::SolidLine);
+    pen.setColor(markersColorB);
+    pen.setWidth(1);
+    painter.setPen(pen);
+
+    for(int i=1; i<dataSize; i++)
+        painter.drawLine(QLineF(gx+(i-1)*dx, gmy-(data[i-1]*dy), gx+i*dx, gmy-(data[i]*dy)));
+}
